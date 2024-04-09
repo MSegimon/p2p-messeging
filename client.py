@@ -2,6 +2,7 @@ import socket
 import threading
 import sqlite3
 import sys
+import re
 
 class P2PClient:
     def __init__(self, server_host, server_port, local_port):
@@ -31,16 +32,36 @@ class P2PClient:
             s.connect((peer_host, int(peer_port)))
             s.send(message.encode('utf-8'))
 
+    def sanitize_input(input_string):
+        sanitized_string = re.sub(r'[^a-zA-Z0-9\s,.?!]', '', input_string)
+        return sanitized_string
+
+    def is_valid_ip(ip_address):
+        pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+        return re.match(pattern, ip_address) is not None
+
+    def is_valid_message(message):
+        return len(message) <= 1024
+
     def receive_message(self):
         while True:
             conn, addr = self.sock.accept()
             message = conn.recv(1024).decode('utf-8')
+            
+            ip_address = str(addr[0])
+            if not is_valid_ip(ip_address) or not is_valid_message(message):
+                print("Received invalid data.")
+                conn.close()
+                continue
+
+            message = sanitize_input(message)
+            
             print(f'\nMessage from {addr}: {message}')
             print("Enter the peer's host and port (host:port) or 'exit' to quit: ")
-            # Store the received message in SQLite database
+
             with sqlite3.connect('messages.db') as conn:
                 c = conn.cursor()
-                c.execute("INSERT INTO messages VALUES (datetime('now'), ?, ?)", (str(addr), message))
+                c.execute("INSERT INTO messages (timestamp, sender, message) VALUES (datetime('now'), ?, ?)", (ip_address, message))
                 conn.commit()
 
     def register_with_server(self):
